@@ -64,3 +64,7 @@ Every change must consider these areas:
 ## Git / GitHub
 
 If changing code around `git`, `gh`, source-control, or review behavior read [`docs/agents-md-refs/git-workflow.md`](./docs/agents-md-refs/git-workflow.md).
+
+# Personal Builds
+
+On `personal`, track official stable release tags and cherry-pick required PR patches. Keep the adopted release tag and carried PRs in [`docs/agents-md-refs/personal-build.md`](./docs/agents-md-refs/personal-build.md). Use that release tag as the base for `pnpm check:changed`.
