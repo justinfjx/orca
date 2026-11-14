@@ -24,6 +24,7 @@ vi.mock('lucide-react-native', () => ({
   Terminal: () => null
 }))
 vi.mock('../../../components/ActionSheetModal', () => ({ ActionSheetModal: () => null }))
+vi.mock('../../../composer-usage/ComposerUsageMeter', () => ({ ComposerUsageSlot: () => null }))
 vi.mock('../input/MobileNativeChatSessionOptionPickers', () => ({
   MobileNativeChatSessionOptionPickers: () => null
 }))

@@ -11,6 +11,11 @@ import { MobileSessionActiveContent } from './MobileSessionActiveContent'
 import { MobileSessionCommandDock } from './MobileSessionCommandDock'
 import { MobileDictationLiveContext } from '../dictation/mobile-dictation-live-context'
 import { useMobileDictationLive } from '../dictation/use-mobile-dictation-live'
+import {
+  ComposerUsageClientContext,
+  ComposerUsageTabAgentContext
+} from '../composer-usage/composer-usage-client-context'
+import { getMobileTerminalTabHostAgentIdentity } from '../terminal/session/mobile-terminal-tab-agent'
 
 export function MobileSessionContentRow({ controller }: { controller: MobileSessionController }) {
   useMobileColorScheme()
@@ -27,8 +32,14 @@ export function MobileSessionContentRow({ controller }: { controller: MobileSess
     createWarning,
     dictation,
     cancelDictation,
-    handleSessionContentRowLayout
+    handleSessionContentRowLayout,
+    client,
+    connState
   } = controller
+  const tabAgent =
+    (controller.activeSessionTab &&
+      getMobileTerminalTabHostAgentIdentity(controller.activeSessionTab, controller.terminals)) ??
+    null
   const dictationLive = useMobileDictationLive(dictation, cancelDictation, hostId)
   return (
     <View style={styles.sessionContentRow} onLayout={handleSessionContentRowLayout}>
@@ -51,9 +62,13 @@ export function MobileSessionContentRow({ controller }: { controller: MobileSess
           </View>
         ) : null}
         <MobileDictationLiveContext.Provider value={dictationLive}>
-          <MobileSessionActiveContent controller={controller} />
-          {/* Why: translate instead of resize so keyboard toggles don't trigger a server-side PTY viewport change. */}
-          <MobileSessionCommandDock controller={controller} />
+          <ComposerUsageClientContext.Provider value={connState === 'connected' ? client : null}>
+            <ComposerUsageTabAgentContext.Provider value={tabAgent}>
+              <MobileSessionActiveContent controller={controller} />
+              {/* Why: translate instead of resize so keyboard toggles don't trigger a server-side PTY viewport change. */}
+              <MobileSessionCommandDock controller={controller} />
+            </ComposerUsageTabAgentContext.Provider>
+          </ComposerUsageClientContext.Provider>
         </MobileDictationLiveContext.Provider>
       </View>
       {canDockPanel && activePanel !== null && (

@@ -46,6 +46,7 @@ import { MobileNativeChatDictationLeading } from './MobileNativeChatDictationLea
 import type { MobileNativeChatStructuredComposer } from './mobile-native-chat-structured-composer'
 import { useMobileNativeChatComposerGoalMode } from './use-mobile-native-chat-composer-goal-mode'
 import { MobileNativeChatComposerPlanChip } from './MobileNativeChatComposerPlanChip'
+import { MobileNativeChatActionGap } from './MobileNativeChatActionGap'
 
 const NO_FILE_PATHS: string[] = []
 const NO_ATTACHMENTS: PendingNativeChatImage[] = []
@@ -279,6 +280,7 @@ export function MobileNativeChatComposer({
 
   const followUp = goal.sendFollowUp(sendFollowUp)
   const headChord = goal.holdsFollowUp ? undefined : steerHead
+  const usage = { agent, visible: editSession === undefined }
   const content = (
     <View ref={groupRef} testID="native-chat-composer-group">
       <MobileNativeChatComposerSuggestions
@@ -343,7 +345,8 @@ export function MobileNativeChatComposer({
           />
           <View style={inputStyles.actionRow} testID="native-chat-composer-actions">
             <MobileNativeChatDictationLeading
-              {...{ micActive, micStarting, micProcessing, cancelRef, trailing: contextRing.ring }}
+              {...{ micActive, micStarting, micProcessing, cancelRef }}
+              trailing={<MobileNativeChatActionGap {...usage} ring={contextRing.ring} />}
             >
               <MobileNativeChatComposerAttachButton
                 onAttachImage={onAttachImage}
