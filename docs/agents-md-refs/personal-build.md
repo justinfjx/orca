@@ -2,7 +2,7 @@
 
 Build the `personal` branch for the official stable release plus these required patches.
 
-Official base: [`v1.4.258`](https://github.com/stablyai/orca/releases/tag/v1.4.258).
+Official base: [`v1.4.259`](https://github.com/stablyai/orca/releases/tag/v1.4.259).
 
 | PR                                                    | Patch                                 | Original commit                                                                        |
 | ----------------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------- |
@@ -29,6 +29,8 @@ git merge <release-tag>
 ```
 
 Merge release tags into this branch to preserve its integration history. Keep unreleased upstream commits on the development and PR branches.
+
+If release histories diverge, reconcile the merge against the new release tree and reapply only the recorded personal patches. Retain both parents in the merge commit.
 
 Review the carried PRs against the new release. When the release includes a patch, remove its row from the table and retain the existing commits. Resolve overlapping upstream changes against the required behavior. For a new patch, use `git cherry-pick -x` on its individual commits and add its source to the table.
 
