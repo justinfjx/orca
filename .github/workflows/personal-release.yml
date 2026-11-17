@@ -92,6 +92,8 @@ jobs:
       - name: Set the integration identity
         run: |
           echo "PERSONAL_OUTPUT_DIR=$RUNNER_TEMP/orca-personal-release" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/orca-personal-vitest"
+          echo "ORCA_UNIT_MODULE_CACHE_PATH=$RUNNER_TEMP/orca-personal-vitest" >> "$GITHUB_ENV"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
       - name: Integrate the official release
