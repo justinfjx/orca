@@ -122,6 +122,9 @@ const bunProject = {
     ...testOptions,
     name: 'bun',
     env: { ...gitEnv, ORCA_VITEST_RUNTIME: 'bun' },
+    ...(process.env.ORCA_PREFLIGHT_SPLIT_RELATED === '1'
+      ? { execArgv: [...testOptions.execArgv, '--smol'] }
+      : {}),
     pool: 'forks',
     exclude: [...testOptions.exclude, ...nodeRuntimeInclude],
     sequence: { groupOrder: 1 }
