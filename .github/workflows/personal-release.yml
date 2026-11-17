@@ -79,6 +79,7 @@ jobs:
     env:
       ORCA_BACKGROUND_LAUNCH: '1'
       ORCA_MOBILE_WEB_APP_DEPS_REQUIRED: '1'
+      ORCA_PREFLIGHT_SPLIT_RELATED: '1'
       PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: warn
       NODE_OPTIONS: --max-old-space-size=4096
       PERSONAL_RELEASE_TAG: ${{ needs.discover.outputs.tag }}
