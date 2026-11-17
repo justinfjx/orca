@@ -422,7 +422,7 @@ jobs:
             src/shared/remote-runtime/ephemeral-vm-store/ephemeral-vm-runtime-rollback-projection.ts \
             src/shared/remote-runtime/ephemeral-vm-store/ephemeral-vm-runtimes.ts \
             src/shared/remote-runtime/ephemeral-vm-recipes/ephemeral-vm-recipes.ts \
-            src/shared/workspace-setup/orca-yaml-hook-types.ts \
+            src/shared/orca-yaml-hook-types.ts \
             config/scripts/runtime-verification/ephemeral-store/run-ephemeral-vm-runtime-store-rollback-repro.mjs \
             config/scripts/runtime-verification/ephemeral-store/ephemeral-vm-runtime-store-cross-version.test.ts \
             src/main/ephemeral-vm/runtime-service.ts \
@@ -855,6 +855,8 @@ jobs:
             src/main/runtime/agent-session/environment/structured-session-cli-login-shell.live-shell.test.ts \
             src/main/startup/shell-environment/shell-probe-terminal-detach.live-shell.test.ts \
             src/main/startup/shell-environment/shell-probe-lifetime.live-shell.test.ts \
+            src/shared/shell/launch/startup-shell-portability.live-shell.test.ts \
+            src/shared/shell/command-resolution/posix-command-path-lookup.test.ts \
             src/renderer/src/components/terminal-pane/pty-connection/emulation/fish-color-scheme-child-stdin.node-pty.test.ts \
             src/shared/shell/wsl/fish-wsl-cwd-report.node-pty.test.ts \
             src/main/wsl/filesystem/wsl-sh-cwd-report.node-pty.test.ts \

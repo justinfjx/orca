@@ -45,9 +45,14 @@ function NativeCacheIndicators() {
   )
 }
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
 
 it('shows native Claude cache indicators for a settled turn and removes them while it works', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(1_800_000_000_000)
   useAppStore.setState({
     settings: { ...getDefaultSettings('/tmp'), promptCacheTimerEnabled: true },
     agentStatusByPaneKey: acceptedAgentStatuses(),
@@ -91,8 +96,8 @@ it('shows native Claude cache indicators for a settled turn and removes them whi
     agent: 'claude',
     status: 'idle' as const,
     latestPrompt: 'Explain the result',
-    updatedAt: Date.now(),
-    statusStartedAt: Date.now()
+    updatedAt: 1_800_000_000_000,
+    statusStartedAt: 1_800_000_000_000
   }
   await act(async () => emit({ type: 'snapshot', sessions: [settled] }))
   expect(screen.getByTestId('pane-cache').textContent).not.toBe('')
