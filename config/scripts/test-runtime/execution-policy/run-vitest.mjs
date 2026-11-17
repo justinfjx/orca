@@ -85,6 +85,7 @@ async function runSplitRelatedTests(spec, runTemp) {
   const collected = await waitForVitest({
     ...spec,
     args: [
+      '--smol',
       '--bun',
       resolve(
         root,
@@ -115,7 +116,7 @@ async function runSplitRelatedTests(spec, runTemp) {
       ]
       const code = await waitForVitest({
         ...spec,
-        args: ['--bun', resolve(root, 'node_modules/vitest/vitest.mjs'), ...args],
+        args: ['--smol', '--bun', resolve(root, 'node_modules/vitest/vitest.mjs'), ...args],
         env: { ...spec.env, [RUN_ARGS_ENV]: JSON.stringify(args) }
       })
       if (code !== 0) {
