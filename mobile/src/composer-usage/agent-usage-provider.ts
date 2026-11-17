@@ -1,4 +1,4 @@
-import { getUsageWindowSections } from '../../../src/shared/usage-provider-windows'
+import { getUsageWindowSections } from '../../../src/shared/agent-usage/display/usage-provider-windows'
 import {
   getActiveProviderRateLimits,
   getOtherUsageProviders

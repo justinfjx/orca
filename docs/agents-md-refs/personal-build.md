@@ -2,16 +2,15 @@
 
 Build the `personal` branch for the official stable release plus these required patches.
 
-Official base: [`v1.4.259`](https://github.com/stablyai/orca/releases/tag/v1.4.259).
+Official base: [`v1.4.261`](https://github.com/stablyai/orca/releases/tag/v1.4.261).
 
 | PR                                                    | Patch                                 | Original commit                                                                        |
 | ----------------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------- |
 | [#41911](https://github.com/stablyai/orca/pull/41911) | Native Claude prompt-cache countdowns | `5503c98dcbdcc1e43df340a69afbdfa131a3ef6b`                                             |
 | [#42043](https://github.com/stablyai/orca/pull/42043) | PDF refresh in generated directories  | `862a886bda8b790d63c2911f1851091c2ac7d275`                                             |
-| [#42375](https://github.com/stablyai/orca/pull/42375) | iPhone Duo session-header spacing     | `d8e5605d0ed73385d1493fa27ba1a60a077386f9`                                             |
 | [#36746](https://github.com/stablyai/orca/pull/36746) | Mobile chat composer usage meter      | `d9ab38223794e0565aed94eb8f6463a292575554`, `da3c69669bfa4f246f6487d2f2a11a1c395ef11f` |
 
-The first three patches were cherry-picked with `-x` to retain their source commits. The #36746 backport carries its usage meter and label-width fix, adapted to the stable release's module paths and composer layout. Develop further PR changes on their original branches, then integrate the required updates here.
+The integration history retains each patch's original attribution. The #36746 backport carries its usage meter and label-width fix, adapted to the stable release's module paths and composer layout. Official v1.4.261 includes the iPhone Duo spacing fix from #42375. Develop further PR changes on their original branches, then integrate the required updates here.
 
 ## Adopt the next stable release
 
@@ -52,3 +51,26 @@ ORCA_BACKGROUND_LAUNCH=1 pnpm build:mac
 The mobile usage meter ships in the desktop-served mobile web bundle. Persisting its window and used/remaining preferences also requires a phone shell built with the new `orca:composerUsageWindow` and `orca:composerUsageDisplay` storage grants. Older shells can display the meter with its defaults.
 
 Keep the previous working installer until the upgraded build passes checks for the required features. Installing an official update replaces the personal build with official code; use builds from this branch while the extra patches are needed.
+
+## Automatic DMG releases
+
+The fork's **Personal macOS Release** workflow checks the official stable release every six hours. It runs from `main`; its build and verification scripts live on `personal`. The standard `macos-15` Apple Silicon runner builds the same manual-install DMG without Apple account credentials.
+
+The workflow integrates into a disposable checkout, validates the carried patches, builds the desktop and mobile bundle, and exercises the packaged desktop and a real terminal. It then rechecks the candidate and advances `personal` with a fast-forward push before publishing the DMG. A concurrent change to `personal` stops publication.
+
+Conflicts, diverged official release histories and failed checks stop the run. The workflow opens or updates `[personal] Automatic release needs attention` in this fork, with a link to the logs. A successful release closes that issue.
+
+Run a check or retry from the default branch:
+
+```sh
+gh workflow run personal-release.yml --repo justinfjx/orca --ref main
+```
+
+For a release that needs manual reconciliation, start a `codex/personal-release-*` candidate branch from `personal`, integrate the new official release and update this ledger. Validate and push that candidate, then dispatch it explicitly:
+
+```sh
+gh workflow run personal-release.yml --repo justinfjx/orca --ref main \
+  -f candidate_ref=codex/personal-release-v1.4.261
+```
+
+Follow the resulting run with `gh run watch <run-id> --repo justinfjx/orca --compact --exit-status`. Dispatch a fresh run after changing source or after a partially completed publication; it resolves the current branch and release state again. GitHub may disable scheduled workflows after 60 days without repository activity; re-enable the workflow in Actions when resuming maintenance.

@@ -1,4 +1,4 @@
-import { getProviderDisplayName } from '../../../src/shared/usage-provider-windows'
+import { getProviderDisplayName } from '../../../src/shared/agent-usage/display/usage-provider-windows'
 import { useContext, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { usageBarFill } from '../accounts/usage/UsageBar'

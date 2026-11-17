@@ -3,6 +3,9 @@ import { cn } from '@/lib/class-names'
 import { Timer } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { useShallow } from 'zustand/react/shallow'
+import { useCallback, useMemo } from 'react'
+import { useAppStateView } from '@/store/retained-views/app-state-view'
+import { useAgentStatusSelector } from '@/runtime/agent-status/use-agent-status'
 import { usePromptCacheCountdownNow } from './prompt-cache-countdown-clock'
 import {
   getMostUrgentPromptCacheStartedAt,
@@ -13,10 +16,12 @@ import {
 import { useTranslate } from '@/i18n/use-translate'
 import { getStructuredAgentSessionTabsByPaneKey } from '@/components/native-chat/session/status/structured-agent-session-tabs'
 import { selectLiveAgentStatusEntriesForWorktree } from './worktree-agent-row-selectors'
+import { useAgentPresentation } from './useWorktreeAgentRows'
 
 /** Resolve the soonest-expiring Claude cache once for both row visibility and countdown rendering. */
 export function usePromptCacheCountdownStartedAt(worktreeId: string, active = true): number | null {
-  const [enabled, ttlMs, startedAt] = useAppStore(
+  const store = useAppStateView()
+  const [enabled, ttlMs, terminalStartedAt] = useAppStore(
     useShallow((s) => {
       if (!active) {
         return [false, 0, null] as const
@@ -26,10 +31,21 @@ export function usePromptCacheCountdownStartedAt(worktreeId: string, active = tr
       if (!enabled || ttlMs <= 0) {
         return [enabled, ttlMs, null] as const
       }
-      let startedAt = getMostUrgentPromptCacheStartedAt(
-        s.tabsByWorktree[worktreeId],
-        s.cacheTimerByKey
-      )
+      return [
+        enabled,
+        ttlMs,
+        getMostUrgentPromptCacheStartedAt(s.tabsByWorktree[worktreeId], s.cacheTimerByKey)
+      ] as const
+    })
+  )
+  const nativeStartedAt = useAgentPresentation(
+    `list\0${worktreeId}`,
+    useCallback(() => {
+      if (!enabled || ttlMs <= 0) {
+        return null
+      }
+      const s = store.getState()
+      let startedAt: number | null = null
       const structuredTabs = getStructuredAgentSessionTabsByPaneKey(s.unifiedTabsByWorktree)
       for (const entry of selectLiveAgentStatusEntriesForWorktree(s, worktreeId)) {
         if (!structuredTabs.has(entry.paneKey)) {
@@ -40,9 +56,14 @@ export function usePromptCacheCountdownStartedAt(worktreeId: string, active = tr
           startedAt = candidate
         }
       }
-      return [enabled, ttlMs, startedAt] as const
-    })
+      return startedAt
+    }, [store, worktreeId, enabled, ttlMs]),
+    enabled && ttlMs > 0
   )
+  let startedAt = terminalStartedAt
+  if (nativeStartedAt !== null && (startedAt === null || nativeStartedAt < startedAt)) {
+    startedAt = nativeStartedAt
+  }
   return enabled && ttlMs > 0 && startedAt != null ? startedAt : null
 }
 
@@ -50,18 +71,28 @@ export function usePromptCacheCountdownForPane(
   paneKey: string,
   active = true
 ): PromptCacheCountdownSelection | null {
-  return useAppStore(
+  const [enabled, ttlMs, structured, terminalStartedAt] = useAppStore(
     useShallow((s) => {
       if (!active || !(s.settings?.promptCacheTimerEnabled ?? false)) {
-        return null
+        return [false, 0, false, null] as const
       }
       const ttlMs = s.settings?.promptCacheTtlMs ?? 0
-      if (getStructuredAgentSessionTabsByPaneKey(s.unifiedTabsByWorktree).has(paneKey)) {
-        const startedAt = getStructuredPromptCacheStartedAt(s.agentStatusByPaneKey[paneKey])
-        return startedAt !== null && ttlMs > 0 ? { startedAt, ttlMs } : null
-      }
-      return getPromptCacheCountdownForPane(paneKey, s.cacheTimerByKey, ttlMs)
+      return [
+        true,
+        ttlMs,
+        getStructuredAgentSessionTabsByPaneKey(s.unifiedTabsByWorktree).has(paneKey),
+        getPromptCacheCountdownForPane(paneKey, s.cacheTimerByKey, ttlMs)?.startedAt ?? null
+      ] as const
     })
+  )
+  const nativeStartedAt = useAgentStatusSelector(
+    enabled && ttlMs > 0 && structured ? paneKey : null,
+    getStructuredPromptCacheStartedAt
+  )
+  const startedAt = structured ? nativeStartedAt : terminalStartedAt
+  return useMemo(
+    () => (enabled && ttlMs > 0 && startedAt !== null ? { startedAt, ttlMs } : null),
+    [enabled, ttlMs, startedAt]
   )
 }
 
