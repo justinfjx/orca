@@ -1,0 +1,172 @@
+name: Personal macOS Release
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      candidate_ref:
+        description: 'Optional pre-reconciled codex/personal-release-* branch; empty follows personal'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: personal-macos-release
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    if: github.repository == 'justinfjx/orca'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      build: ${{ steps.release.outputs.build }}
+      tag: ${{ steps.release.outputs.tag }}
+      source: ${{ steps.release.outputs.source }}
+      personal: ${{ steps.release.outputs.personal }}
+    steps:
+      - name: Find the latest official stable release
+        id: release
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const {owner, repo} = context.repo
+            const branch = context.payload.inputs?.candidate_ref?.trim() || 'personal'
+            if (branch !== 'personal' && !/^codex\/personal-release-[A-Za-z0-9.-]+$/.test(branch)) {
+              throw new Error('Choose personal or a pre-reconciled codex/personal-release-* branch.')
+            }
+            const latest = (await github.rest.repos.getLatestRelease({owner:'stablyai',repo:'orca'})).data
+            if (latest.draft || latest.prerelease || !/^v\d+\.\d+\.\d+$/.test(latest.tag_name)) {
+              throw new Error('Upstream latest is not a numbered stable release.')
+            }
+            const source = (await github.rest.repos.getBranch({owner,repo,branch})).data.commit.sha
+            const personal = (await github.rest.repos.getBranch({owner,repo,branch:'personal'})).data.commit.sha
+            const file = (await github.rest.repos.getContent({owner,repo,path:'docs/agents-md-refs/personal-build.md',ref:source})).data
+            const ledger = Buffer.from(file.content,'base64').toString('utf8')
+            const base = /^Official base: \[`(v\d+\.\d+\.\d+)`\]/m.exec(ledger)?.[1]
+            if (!base) throw new Error('The selected branch has no recorded stable base.')
+            const numbers = tag => tag.slice(1).split('.').map(Number)
+            const old = numbers(base), next = numbers(latest.tag_name)
+            const difference = next.findIndex((value,index) => value !== old[index])
+            if (difference !== -1 && next[difference] < old[difference]) {
+              throw new Error(`Official latest ${latest.tag_name} is older than the recorded ${base}.`)
+            }
+            const releases = (await github.rest.repos.listReleases({owner,repo,per_page:100})).data
+            const published = releases.some(release => !release.draft &&
+              release.tag_name.startsWith(`personal-${latest.tag_name}-`) &&
+              release.target_commitish === source &&
+              release.assets.some(asset => asset.name === 'orca-macos-arm64.dmg' && asset.state === 'uploaded'))
+            core.setOutput('build',String(!published))
+            core.setOutput('tag',latest.tag_name)
+            core.setOutput('source',source)
+            core.setOutput('personal',personal)
+            await core.summary.addHeading(published ? 'Personal release is current' : `Prepare ${latest.tag_name}`)
+              .addRaw(`Source: ${branch} at ${source}\n`).write()
+
+  release:
+    needs: discover
+    if: needs.discover.outputs.build == 'true'
+    runs-on: macos-15
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    outputs:
+      url: ${{ steps.publish.outputs.url }}
+    env:
+      ORCA_BACKGROUND_LAUNCH: '1'
+      ORCA_MOBILE_WEB_APP_DEPS_REQUIRED: '1'
+      PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: warn
+      NODE_OPTIONS: --max-old-space-size=4096
+      PERSONAL_RELEASE_TAG: ${{ needs.discover.outputs.tag }}
+      PERSONAL_START_SHA: ${{ needs.discover.outputs.personal }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.discover.outputs.source }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set the integration identity
+        run: |
+          echo "PERSONAL_OUTPUT_DIR=$RUNNER_TEMP/orca-personal-release" >> "$GITHUB_ENV"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+      - name: Integrate the official release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node config/scripts/desktop-distribution/personal/personal-release.mjs prepare
+      - name: Install the pinned desktop toolchain
+        uses: ./.github/actions/install-node-dependencies
+        with:
+          native-runtime: node
+          persist-native-cache: 'false'
+          cache-electron-package: 'true'
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            mobile/pnpm-lock.yaml
+      - name: Install mobile dependencies and generated resources
+        uses: ./.github/actions/install-mobile-dependencies
+      - name: Install hidden browser engines
+        run: pnpm exec playwright install chromium webkit
+      - name: Validate the candidate before building
+        run: pnpm check:changed --base="$PERSONAL_RELEASE_TAG" --maxWorkers=1
+      - name: Build the manual-install Apple Silicon DMG
+        run: node config/scripts/desktop-distribution/personal/personal-release.mjs build
+      - name: Verify the application inside the DMG
+        run: node config/scripts/desktop-distribution/personal/personal-release-smoke.mjs
+      - name: Advance personal and publish the verified DMG
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node config/scripts/desktop-distribution/personal/personal-release.mjs publish
+      - name: Retain release verification evidence
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: personal-release-verification-${{ github.run_id }}
+          path: |
+            ${{ env.PERSONAL_OUTPUT_DIR }}/release.json
+            ${{ env.PERSONAL_OUTPUT_DIR }}/verification.json
+            ${{ env.PERSONAL_OUTPUT_DIR }}/packaged-desktop.png
+          if-no-files-found: ignore
+          retention-days: 3
+
+  report:
+    needs: [discover, release]
+    if: >-
+      always() && github.repository == 'justinfjx/orca' &&
+      (needs.discover.result == 'failure' || needs.release.result == 'failure' || needs.release.result == 'success')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Report the result in the fork
+        uses: actions/github-script@v8
+        env:
+          DISCOVERY_RESULT: ${{ needs.discover.result }}
+          RELEASE_RESULT: ${{ needs.release.result }}
+          RELEASE_URL: ${{ needs.release.outputs.url }}
+          RELEASE_TAG: ${{ needs.discover.outputs.tag }}
+        with:
+          script: |
+            const {owner, repo} = context.repo
+            const title = '[personal] Automatic release needs attention'
+            const issues = (await github.rest.issues.listForRepo({owner,repo,state:'open',creator:'github-actions[bot]',per_page:100})).data
+            const existing = issues.find(issue => !issue.pull_request && issue.title === title)
+            const run = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`
+            if (process.env.RELEASE_RESULT === 'success') {
+              if (existing) {
+                await github.rest.issues.createComment({owner,repo,issue_number:existing.number,body:`Resolved by ${process.env.RELEASE_URL}.\n\nVerified run: ${run}`})
+                await github.rest.issues.update({owner,repo,issue_number:existing.number,state:'closed'})
+              }
+              return
+            }
+            const body = `The personal release for ${process.env.RELEASE_TAG || 'the latest stable'} stopped.\n\nLogs: ${run}\n\nDiscovery: ${process.env.DISCOVERY_RESULT}; release: ${process.env.RELEASE_RESULT}.\n\nThe last published installer remains available. Resolve any conflicting or diverged release history in a codex/personal-release-* candidate branch, then dispatch this workflow with that branch. For a build failure, repair its named dependency or check and retry.`
+            if (existing) await github.rest.issues.update({owner,repo,issue_number:existing.number,body})
+            else await github.rest.issues.create({owner,repo,title,body})
