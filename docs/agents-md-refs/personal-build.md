@@ -56,7 +56,7 @@ Keep the previous working installer until the upgraded build passes checks for t
 
 The fork's **Personal macOS Release** workflow checks the official stable release every six hours. It runs from `main`; its build and verification scripts live on `personal`. The standard `macos-15` Apple Silicon runner builds the same manual-install DMG without Apple account credentials.
 
-The workflow integrates into a disposable checkout, validates the carried patches, builds the desktop and mobile bundle, and exercises the packaged desktop and a real terminal. It then rechecks the candidate and advances `personal` with a fast-forward push before publishing the DMG. A concurrent change to `personal` stops publication.
+The workflow fetches the official version tags for historical-client compatibility checks, integrates into a disposable checkout, validates the carried patches, builds the desktop and mobile bundle, and exercises the packaged desktop and a real terminal. It then rechecks the candidate and advances `personal` with a fast-forward push before publishing the DMG. A concurrent change to `personal` stops publication.
 
 For low-memory runners, `ORCA_PREFLIGHT_SPLIT_RELATED=1` resolves the related test files in a separate process, then runs them after that process exits. The workflow keeps this mode enabled to release the discovery graph before test workers start.
 

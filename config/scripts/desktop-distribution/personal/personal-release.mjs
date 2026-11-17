@@ -59,15 +59,13 @@ async function prepare() {
   }
   let ledger = readFileSync(join(root, PERSONAL_BUILD_LEDGER), 'utf8')
   const base = personalReleaseBase(ledger)
-  for (const release of new Set([base, tag])) {
-    personalGit(
-      root,
-      'fetch',
-      '--no-tags',
-      `https://github.com/${upstream}.git`,
-      `refs/tags/${release}:refs/tags/${release}`
-    )
-  }
+  personalGit(
+    root,
+    'fetch',
+    '--no-tags',
+    `https://github.com/${upstream}.git`,
+    'refs/tags/v*:refs/tags/v*'
+  )
   mergePersonalStableRelease(root, base, tag)
   ledger = readFileSync(join(root, PERSONAL_BUILD_LEDGER), 'utf8')
   const upstreamSha = personalGit(root, 'rev-parse', `${tag}^{commit}`)
