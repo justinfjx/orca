@@ -1,5 +1,6 @@
 import os from 'node:os'
-import { resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { runProcess, runProcessSync, spawnProcess } from '@orca/process-host'
 import { hasNoChangedFiles } from './vitest-changed-precheck.mjs'
 import { RUN_ARGS_ENV } from './vitest-run-filters.mjs'
@@ -53,6 +54,89 @@ function waitForVitest(spec) {
   })
 }
 
+function relatedTestBatches(files) {
+  const batches = []
+  let batch = []
+  let characters = 0
+  for (const file of files) {
+    if (batch.length > 0 && characters + file.length > 16000) {
+      batches.push(batch)
+      batch = []
+      characters = 0
+    }
+    batch.push(file)
+    characters += file.length + 1
+  }
+  if (batch.length > 0) {
+    batches.push(batch)
+  }
+  return batches
+}
+
+async function runSplitRelatedTests(spec, runTemp) {
+  const configIndex = vitestArgs.indexOf('--config')
+  if (!runTemp || vitestArgs[1] !== '--run' || configIndex < 2) {
+    throw new Error(
+      'Split related selection requires the preflight related --run ... --config command.'
+    )
+  }
+  const planPath = join(runTemp.path, 'related-test-specifications.json')
+  // Release the full dependency graph before starting test workers on memory-limited runners.
+  const collected = await waitForVitest({
+    ...spec,
+    args: [
+      '--bun',
+      resolve(
+        root,
+        'config/scripts/test-runtime/execution-policy/collect-related-test-specifications.mjs'
+      ),
+      planPath,
+      ...vitestArgs
+    ]
+  })
+  if (collected !== 0) {
+    return collected
+  }
+  const projects = JSON.parse(readFileSync(planPath, 'utf8'))
+  const sharedArgs = vitestArgs.slice(configIndex).filter((arg) => arg !== '--passWithNoTests')
+  let batchIndex = 0
+  for (const { project, files } of projects) {
+    for (const batch of relatedTestBatches(files)) {
+      console.log(`Running ${batch.length} related test files in ${project}.`)
+      const reportPath = join(runTemp.path, `related-batch-${batchIndex++}.json`)
+      const args = [
+        'run',
+        ...batch,
+        `--project=${project}`,
+        ...sharedArgs,
+        '--reporter=default',
+        '--reporter=json',
+        `--outputFile.json=${reportPath}`
+      ]
+      const code = await waitForVitest({
+        ...spec,
+        args: ['--bun', resolve(root, 'node_modules/vitest/vitest.mjs'), ...args],
+        env: { ...spec.env, [RUN_ARGS_ENV]: JSON.stringify(args) }
+      })
+      if (code !== 0) {
+        return code
+      }
+      const report = JSON.parse(readFileSync(reportPath, 'utf8'))
+      const actual = report.testResults.map((test) => resolve(test.name)).sort()
+      const expected = batch.map((file) => resolve(root, file)).sort()
+      if (
+        actual.length !== expected.length ||
+        actual.some((file, index) => file !== expected[index])
+      ) {
+        throw new Error(
+          `Related test file inventory changed in ${project}: expected ${expected.length}, ran ${actual.length}.`
+        )
+      }
+    }
+  }
+  return 0
+}
+
 async function runVitest() {
   const pinnedBun = resolvePinnedBunExecutable(root, runProcessSync)
   const bunCheck = pinnedBun
@@ -69,23 +153,25 @@ async function runVitest() {
     const zodBundle = createVitestZodBundle(root)
     const moduleCacheEnv = await localModuleCacheEnv(root)
     runTemp = createRunTempDirectory()
+    const env = {
+      ...process.env,
+      ...runTemp?.env,
+      ...moduleCacheEnv,
+      ORCA_BACKGROUND_LAUNCH: '1',
+      ORCA_TEST_NODE_EXECUTABLE: process.execPath,
+      ORCA_TEST_NODE_VERSION: process.versions.node,
+      ORCA_UNIT_ZOD_BUNDLE: zodBundle.path,
+      [RUN_ARGS_ENV]: JSON.stringify(vitestArgs),
+      // The config's TypeScript and CommonJS package scope are intended; the notice is noise.
+      VITE_CONFIG_NATIVE_IGNORE_WARNING: 'true'
+    }
+    const spec = { program: pinnedBun ?? 'bun', cwd: root, env, stdio: 'inherit' }
+    if (process.env.ORCA_PREFLIGHT_SPLIT_RELATED === '1' && vitestArgs[0] === 'related') {
+      return await runSplitRelatedTests(spec, runTemp)
+    }
     return await waitForVitest({
-      program: pinnedBun ?? 'bun',
-      args: ['--bun', resolve(root, 'node_modules/vitest/vitest.mjs'), ...vitestArgs],
-      cwd: root,
-      env: {
-        ...process.env,
-        ...runTemp?.env,
-        ...moduleCacheEnv,
-        ORCA_BACKGROUND_LAUNCH: '1',
-        ORCA_TEST_NODE_EXECUTABLE: process.execPath,
-        ORCA_TEST_NODE_VERSION: process.versions.node,
-        ORCA_UNIT_ZOD_BUNDLE: zodBundle.path,
-        [RUN_ARGS_ENV]: JSON.stringify(vitestArgs),
-        // The config's TypeScript and CommonJS package scope are intended; the notice is noise.
-        VITE_CONFIG_NATIVE_IGNORE_WARNING: 'true'
-      },
-      stdio: 'inherit'
+      ...spec,
+      args: ['--bun', resolve(root, 'node_modules/vitest/vitest.mjs'), ...vitestArgs]
     })
   } catch (error) {
     console.error('Could not prepare or start Vitest:', error)

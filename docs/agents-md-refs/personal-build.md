@@ -58,6 +58,8 @@ The fork's **Personal macOS Release** workflow checks the official stable releas
 
 The workflow integrates into a disposable checkout, validates the carried patches, builds the desktop and mobile bundle, and exercises the packaged desktop and a real terminal. It then rechecks the candidate and advances `personal` with a fast-forward push before publishing the DMG. A concurrent change to `personal` stops publication.
 
+For low-memory runners, `ORCA_PREFLIGHT_SPLIT_RELATED=1` resolves the related test files in a separate process, then runs them after that process exits. The workflow keeps this mode enabled to release the discovery graph before test workers start.
+
 Conflicts, diverged official release histories and failed checks stop the run. The workflow opens or updates `[personal] Automatic release needs attention` in this fork, with a link to the logs. A successful release closes that issue.
 
 Run a check or retry from the default branch:
