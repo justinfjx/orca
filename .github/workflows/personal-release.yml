@@ -114,7 +114,7 @@ jobs:
       - name: Install hidden browser engines
         run: pnpm exec playwright install chromium webkit
       - name: Validate the candidate before building
-        run: pnpm check:changed --base="$PERSONAL_RELEASE_TAG" --maxWorkers=1
+        run: /usr/bin/time -l pnpm check:changed --base="$PERSONAL_RELEASE_TAG" --maxWorkers=2 --timeout=45
       - name: Build the manual-install Apple Silicon DMG
         run: node config/scripts/desktop-distribution/personal/personal-release.mjs build
       - name: Verify the application inside the DMG
