@@ -12,6 +12,8 @@ Official base: [`v1.4.264`](https://github.com/stablyai/orca/releases/tag/v1.4.2
 
 The integration history retains each patch's original attribution. The #36746 backport carries its usage meter and label-width fix, adapted to the stable release's module paths and composer layout. Official v1.4.261 includes the iPhone Duo spacing fix from #42375. Develop further PR changes on their original branches, then integrate the required updates here.
 
+The v1.4.264 release cut copied `journal-file-lock.yml` from upstream main ahead of its native module, builder and two lock tests. This build omits that orphaned workflow. Restore the official workflow when a stable tag ships those components.
+
 ## Adopt the next stable release
 
 Use a clean checkout of `personal`. Find the latest official stable release:
