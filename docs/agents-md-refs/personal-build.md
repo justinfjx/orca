@@ -2,7 +2,7 @@
 
 Build the `personal` branch for the official stable release plus these required patches.
 
-Official base: [`v1.4.261`](https://github.com/stablyai/orca/releases/tag/v1.4.261).
+Official base: [`v1.4.264`](https://github.com/stablyai/orca/releases/tag/v1.4.264).
 
 | PR                                                    | Patch                                 | Original commit                                                                        |
 | ----------------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------- |
@@ -20,16 +20,14 @@ Use a clean checkout of `personal`. Find the latest official stable release:
 gh release view --repo stablyai/orca --json tagName,isPrerelease,url
 ```
 
-Replace `<release-tag>` below with that stable tag, then fetch and merge it:
+Fetch the numbered tag, then apply the same integration policy as CI from a clean candidate branch:
 
 ```sh
 git fetch --no-tags upstream refs/tags/<release-tag>:refs/tags/<release-tag>
-git merge <release-tag>
+node --input-type=module -e "import {mergePersonalStableRelease as merge} from './config/scripts/desktop-distribution/personal/personal-release-state.mjs'; merge(process.cwd(), process.argv[1], process.argv[2])" <recorded-tag> <release-tag>
 ```
 
-Merge release tags into this branch to preserve its integration history. Keep unreleased upstream commits on the development and PR branches.
-
-If release histories diverge, reconcile the merge against the new release tree and reapply only the recorded personal patches. Retain both parents in the merge commit.
+A linear release merges normally. For sibling release tags, the three-way merge uses the recorded official tag as its base: the new release supplies the official code and only the fork's changes carry over. Both parents stay in history. If the same change overlaps, resolve it on a candidate based on the new release tree; preserve both parents and check the recorded patches before dispatch.
 
 Review the carried PRs against the new release. When the release includes a patch, remove its row from the table and retain the existing commits. Resolve overlapping upstream changes against the required behavior. For a new patch, use `git cherry-pick -x` on its individual commits and add its source to the table.
 
@@ -60,7 +58,7 @@ The workflow fetches the official version tags for historical-client compatibili
 
 For low-memory runners, `ORCA_PREFLIGHT_SPLIT_RELATED=1` resolves the related test files in a separate process, then runs them after that process exits. The workflow keeps this mode enabled to release the discovery graph before test workers start.
 
-Conflicts, diverged official release histories and failed checks stop the run. The workflow opens or updates `[personal] Automatic release needs attention` in this fork, with a link to the logs. A successful release closes that issue.
+Overlapping edits that Git cannot merge, unrelated histories and failed checks stop the run. The workflow opens or updates `[personal] Automatic release needs attention` in this fork, with a link to the logs. A successful release closes that issue.
 
 Run a check or retry from the default branch:
 
@@ -72,7 +70,7 @@ For a release that needs manual reconciliation, start a `codex/personal-release-
 
 ```sh
 gh workflow run personal-release.yml --repo justinfjx/orca --ref main \
-  -f candidate_ref=codex/personal-release-v1.4.261
+  -f candidate_ref=codex/personal-release-v1.4.264
 ```
 
 Follow the resulting run with `gh run watch <run-id> --repo justinfjx/orca --compact --exit-status`. Dispatch a fresh run after changing source or after a partially completed publication; it resolves the current branch and release state again. GitHub may disable scheduled workflows after 60 days without repository activity; re-enable the workflow in Actions when resuming maintenance.

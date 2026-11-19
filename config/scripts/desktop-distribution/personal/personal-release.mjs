@@ -127,7 +127,7 @@ async function buildDmg() {
     'config/scripts/mobile-web-app/shell/mobile-web-app-top-chrome-render.test.mjs',
     '--maxWorkers=1'
   )
-  pnpm('test:e2e', 'tests/e2e/pdf-viewer-file-rewrite.spec.ts', '--workers=1')
+  pnpm('test:e2e', 'tests/e2e/editor/pdf/pdf-viewer-file-rewrite.spec.ts', '--workers=1')
   pnpm('build:desktop')
   pnpm('build:computer-macos')
   for (const helper of ['keyboard-layout', 'process-footprint', 'notification-status']) {

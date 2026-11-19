@@ -24,8 +24,11 @@ export const TERMINAL_SHORTCUT_STORAGE_KEYS = [
 export const TERMINAL_SETTINGS_STORAGE_KEYS = [
   ...TERMINAL_SHORTCUT_STORAGE_KEYS,
   'orca:terminalTextScale',
+  'orca:terminalFontStyle',
   'orca:terminalAutocompleteEnabled',
-  'orca:terminalLinkOpenMode'
+  'orca:terminalLinkOpenMode',
+  /** Chat text size, font and spacing, so an open chat follows Settings too. */
+  'orca:nativeChatText'
 ] as const
 
 export const PAGE_STORAGE_EXACT_KEYS = [
@@ -43,7 +46,12 @@ export const PAGE_STORAGE_EXACT_KEYS = [
   'orca:terminalLinkOpenMode',
   /** The split terminal's chosen direction. */
   'orca:terminalSplitLayout',
-  /** The composer's quota window and percentage display on this device. */
+  /** Terminal font, line spacing and weight. */
+  'orca:terminalFontStyle',
+  /** Chat text size, font and spacing; a pinch in a chat saves here. */
+  'orca:nativeChatText',
+  /** The New Tab sheet's Chat or CLI pick. */
+  'orca:newAgentSurface',
   'orca:composerUsageWindow',
   'orca:composerUsageDisplay'
 ] as const
@@ -55,6 +63,9 @@ export const PAGE_STORAGE_EXACT_KEYS = [
  */
 export const NEGOTIATED_PAGE_STORAGE_KEYS = [
   'orca:terminalSplitLayout',
+  'orca:terminalFontStyle',
+  'orca:nativeChatText',
+  'orca:newAgentSurface',
   'orca:composerUsageWindow',
   'orca:composerUsageDisplay'
 ] as const

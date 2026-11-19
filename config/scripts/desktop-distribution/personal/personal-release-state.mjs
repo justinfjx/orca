@@ -35,18 +35,34 @@ export function personalIsAncestor(root, ancestor, descendant) {
 }
 
 export function mergePersonalStableRelease(root, base, tag) {
-  if (!personalIsAncestor(root, base, tag)) {
-    const error = new Error(
-      `${base} and ${tag} have diverged release histories. Reconcile a candidate branch against ${tag} and dispatch it explicitly.`
-    )
-    error.code = 'PERSONAL_RELEASE_HISTORY_DIVERGED'
-    throw error
+  if (!personalIsAncestor(root, base, 'HEAD')) {
+    throw new Error('Personal ledger base is absent from its commit history.')
   }
   if (base === tag) {
-    if (!personalIsAncestor(root, tag, 'HEAD')) {
-      throw new Error('Personal ledger base is absent from its commit history.')
-    }
     return
   }
-  personalGit(root, 'merge', '--no-ff', '--no-commit', tag)
+  if (personalIsAncestor(root, base, tag)) {
+    personalGit(root, 'merge', '--no-ff', '--no-commit', tag)
+    return
+  }
+  if (personalIsAncestor(root, tag, 'HEAD')) {
+    throw new Error(`Refusing to move the personal baseline back to ${tag}.`)
+  }
+  // Keep both parents, but replay only the fork's changes since its recorded release.
+  personalGit(root, 'merge', '--no-ff', '--no-commit', '-s', 'ours', tag)
+  try {
+    personalGit(root, 'merge-recursive', base, '--', 'HEAD', tag)
+  } catch (error) {
+    const conflicts = personalGit(root, 'diff', '--name-only', '--diff-filter=U')
+    personalGit(root, 'merge', '--abort')
+    if (!conflicts) {
+      throw error
+    }
+    throw new Error(
+      `Reconcile personal changes against ${tag} in a candidate branch:\n${conflicts}`,
+      {
+        cause: error
+      }
+    )
+  }
 }

@@ -1,9 +1,6 @@
-import { getNativeChatAgentProfile } from '../../../../../src/shared/native-chat/native-chat-agent-profiles'
+import { getNativeChatAgentProfile } from '../../../../../src/shared/native-chat/input/commands/native-chat-agent-profiles'
 import type { NativeChatSendFollowUp } from '../../../../../src/shared/native-chat/input/composer/native-chat-follow-up-behavior'
-import {
-  recordMobileNativeChatSkillPick,
-  useMobileNativeChatDraft
-} from './drafts/mobile-native-chat-draft-store'
+import { recordMobileNativeChatSkillPick } from './drafts/mobile-native-chat-draft-store'
 import { useMobileNativeChatComposerDictation } from './dictation/use-mobile-native-chat-composer-dictation'
 import {
   focusMobileNativeChatTextDestination,
@@ -48,12 +45,13 @@ import { useMobileNativeChatComposerGoalMode } from './commands/use-mobile-nativ
 import { MobileNativeChatComposerPlanChip } from './commands/MobileNativeChatComposerPlanChip'
 import { MobileNativeChatMcpTray } from '../mcp/MobileNativeChatMcpTray'
 import { MobileNativeChatActionGap } from './MobileNativeChatActionGap'
+import { MobileNativeChatQuoteTab } from './quotes/MobileNativeChatQuoteTab'
 
 const NO_FILE_PATHS: string[] = []
 const NO_ATTACHMENTS: PendingNativeChatImage[] = []
 const NO_FILES: PendingNativeChatFile[] = []
 
-type Props = MobileNativeChatMicProps & {
+export type MobileNativeChatComposerProps = MobileNativeChatMicProps & {
   // Applies dictation's edit to the draft this composer shows; false when it can no longer take it.
   insertDictation?: (insert: (draft: string) => string) => boolean | void
   draftScopeKey?: string | null
@@ -105,7 +103,10 @@ type Props = MobileNativeChatMicProps & {
 }
 
 /** What a chat's composer sends through, which the chat view hands down from its route. */
-export type MobileNativeChatSendProps = Pick<Props, 'onSend' | 'sendFollowUp'>
+export type MobileNativeChatSendProps = Pick<
+  MobileNativeChatComposerProps,
+  'onSend' | 'sendFollowUp'
+>
 
 export function MobileNativeChatComposer({
   inputRef,
@@ -146,7 +147,7 @@ export function MobileNativeChatComposer({
   stop = null,
   sendFollowUp = null,
   steerHead
-}: Props): React.JSX.Element {
+}: MobileNativeChatComposerProps): React.JSX.Element {
   useMobileColorScheme()
   const t = useMobileTranslation()
   const fallbackInputRef = useRef<TextInputInstance>(null)
@@ -281,151 +282,148 @@ export function MobileNativeChatComposer({
 
   const followUp = goal.sendFollowUp(sendFollowUp)
   const headChord = goal.holdsFollowUp ? undefined : steerHead
-  const usage = { agent, visible: editSession === undefined }
+  const usage = { agent, visible: !editSession, ring: contextRing.ring }
+  const content = (
+    <View ref={groupRef} testID="native-chat-composer-group">
+      <MobileNativeChatComposerSuggestions
+        anchorRef={groupRef}
+        rows={menu.rows}
+        onPick={menu.pick}
+        nestedScrollEnabled={editSession ? true : undefined}
+      />
+      <View style={styles.composerInset} testID="native-chat-composer-inset">
+        {editSession ? null : <MobileNativeChatMcpTray panel={structured?.mcpPanel} />}
+        {goal.strip}
+        {editSession ? null : <MobileNativeChatQuoteTab {...{ value, onChangeText, fieldRef }} />}
+        <View {...contextRing.barProps} style={styles.bar} testID="native-chat-composer">
+          <MobileNativeChatComposerAttachments
+            images={attachments}
+            files={files}
+            onRemoveImage={editSession?.locked ? undefined : onRemoveAttachment}
+            onRemoveFile={editSession?.locked ? undefined : structured?.onRemoveFile}
+          />
+          <MobileNativeChatComposerField
+            ref={fieldRef}
+            value={value}
+            skillToken={menu.skillToken}
+            onChangeText={menu.onFieldChange}
+            onKeyboardSubmit={() => {
+              const first = menu.rows[0]
+              if (first) {
+                menu.pick(first)
+              } else if (editSession || value.trim() !== '' || attachmentCount > 0) {
+                void handleSend(editSession ? undefined : { alternate: true }, true)
+              } else {
+                // Nothing of its own to send, so the head card goes; the queue decides whether it may.
+                headChord?.run(followUp?.action === 'queue' && followUp.offersChoice)
+              }
+            }}
+            onFocus={() => {
+              setFocused(true)
+              if (draftScopeKey) {
+                focusMobileNativeChatTextDestination(draftScopeKey)
+              }
+            }}
+            onBlur={() => setFocused(false)}
+            onWebPaste={onWebPaste}
+            // Controlled only transiently right after an autocomplete insert.
+            selection={menu.pendingSelection ?? undefined}
+            dictationPreview={dictation.preview}
+            onSelectionChange={(e) => {
+              dictation.readSelection(e)
+              menu.onSelectionChange(e.nativeEvent.selection)
+            }}
+            placeholder={
+              goal.placeholder ??
+              placeholder ??
+              t('chat.composer.placeholder', 'Ask anything, @ to mention files, / for commands')
+            }
+            placeholderTextColor={colors.textMuted}
+            selectionColor={colors.accentBlue}
+            multiline
+            editable={!editSession?.locked}
+            // Why: never revoke `editable` — iOS resigns first responder on a focused
+            // field, so a transient lock would yank the keyboard mid-typing (#10681).
+            // The lock gates sending; the draft survives and rides the next send.
+            textAlignVertical="top"
+          />
+          <View style={inputStyles.actionRow} testID="native-chat-composer-actions">
+            <MobileNativeChatDictationLeading
+              {...{ micActive, micStarting, micProcessing, cancelRef }}
+              trailing={<MobileNativeChatActionGap {...usage} />}
+            >
+              <MobileNativeChatComposerAttachButton
+                onAttachImage={onAttachImage}
+                onAttachFiles={structured?.onAttachFiles}
+                structured={structured !== null}
+                isAttaching={isAttaching}
+                disabled={disabled || offline}
+                menu={menu}
+              />
+              {sessionOptions ? (
+                <MobileNativeChatSessionOptionPickers
+                  {...sessionOptions}
+                  sendInFlight={sending || isAttaching}
+                  presentation={picker}
+                  onNavigate={(page) => setPicker((current) => current && { ...current, page })}
+                  onDrawerOpen={(page) => setPicker({ page, refocus: focused })}
+                  onDrawerAfterClose={() => {
+                    if (picker?.refocus) {
+                      fieldRef.current?.focus()
+                    }
+                    setPicker(null)
+                  }}
+                />
+              ) : null}
+              <MobileNativeChatComposerPlanChip options={sessionOptions} inputRef={fieldRef} />
+              {goal.chip}
+            </MobileNativeChatDictationLeading>
+            {onMicPress ? (
+              <MobileNativeChatComposerMic
+                {...{ onMicPress, micActive, micStarting, micProcessing, dictationMode }}
+                {...{ onMicPressIn, onMicPressOut, cancelRef }}
+                disabled={disabled || offline}
+              />
+            ) : null}
+            {editSession ? (
+              <MobileNativeChatEditActions
+                canSave={canSend}
+                onCancel={editSession.cancel}
+                onSave={() => void handleSend()}
+              />
+            ) : (
+              <MobileNativeChatComposerSendSlot
+                {...{
+                  fieldRef,
+                  value,
+                  draftScopeKey,
+                  attachmentCount,
+                  structured,
+                  agent,
+                  followUp,
+                  canSend,
+                  stop
+                }}
+                snapshot={sessionOptions?.controller.snapshot}
+                steerHead={headChord}
+                pickerOpen={menu.rows.length > 0}
+                sendDisabled={sendDisabled}
+                attaching={isAttaching || filesUploading || micActive}
+                onSend={(intent, keepFocus) => void handleSend(intent, keepFocus)}
+              />
+            )}
+          </View>
+        </View>
+      </View>
+    </View>
+  )
   return (
     <MobileNativeChatComposerAllocation
       anchorRef={groupRef}
       fieldRef={fieldRef}
       hasMenu={menu.rows.length > 0}
     >
-      <View ref={groupRef} testID="native-chat-composer-group">
-        <MobileNativeChatComposerSuggestions
-          anchorRef={groupRef}
-          rows={menu.rows}
-          onPick={menu.pick}
-          nestedScrollEnabled={editSession ? true : undefined}
-        />
-        <View style={styles.composerInset} testID="native-chat-composer-inset">
-          {editSession ? null : <MobileNativeChatMcpTray panel={structured?.mcpPanel} />}
-          {goal.strip}
-          <View {...contextRing.barProps} style={styles.bar} testID="native-chat-composer">
-            <MobileNativeChatComposerAttachments
-              images={attachments}
-              files={files}
-              onRemoveImage={editSession?.locked ? undefined : onRemoveAttachment}
-              onRemoveFile={editSession?.locked ? undefined : structured?.onRemoveFile}
-            />
-            <MobileNativeChatComposerField
-              ref={fieldRef}
-              value={value}
-              skillToken={menu.skillToken}
-              onChangeText={menu.onFieldChange}
-              onKeyboardSubmit={() => {
-                const first = menu.rows[0]
-                if (first) {
-                  menu.pick(first)
-                } else if (editSession || value.trim() !== '' || attachmentCount > 0) {
-                  void handleSend(editSession ? undefined : { alternate: true }, true)
-                } else {
-                  // Nothing of its own to send, so the head card goes; the queue decides whether it may.
-                  headChord?.run(followUp?.action === 'queue' && followUp.offersChoice)
-                }
-              }}
-              onFocus={() => {
-                setFocused(true)
-                if (draftScopeKey) {
-                  focusMobileNativeChatTextDestination(draftScopeKey)
-                }
-              }}
-              onBlur={() => setFocused(false)}
-              onWebPaste={onWebPaste}
-              // Controlled only transiently right after an autocomplete insert.
-              selection={menu.pendingSelection ?? undefined}
-              dictationPreview={dictation.preview}
-              onSelectionChange={(e) => {
-                dictation.readSelection(e)
-                menu.onSelectionChange(e.nativeEvent.selection)
-              }}
-              placeholder={
-                goal.placeholder ??
-                placeholder ??
-                t('chat.composer.placeholder', 'Ask anything, @ to mention files, / for commands')
-              }
-              placeholderTextColor={colors.textMuted}
-              selectionColor={colors.accentBlue}
-              multiline
-              editable={!editSession?.locked}
-              // Why: never revoke `editable` — iOS resigns first responder on a focused
-              // field, so a transient lock would yank the keyboard mid-typing (#10681).
-              // The lock gates sending; the draft survives and rides the next send.
-              textAlignVertical="top"
-            />
-            <View style={inputStyles.actionRow} testID="native-chat-composer-actions">
-              <MobileNativeChatDictationLeading
-                {...{ micActive, micStarting, micProcessing, cancelRef }}
-                trailing={<MobileNativeChatActionGap {...usage} ring={contextRing.ring} />}
-              >
-                <MobileNativeChatComposerAttachButton
-                  onAttachImage={onAttachImage}
-                  onAttachFiles={structured?.onAttachFiles}
-                  structured={structured !== null}
-                  isAttaching={isAttaching}
-                  disabled={disabled || offline}
-                  menu={menu}
-                />
-                {sessionOptions ? (
-                  <MobileNativeChatSessionOptionPickers
-                    {...sessionOptions}
-                    sendInFlight={sending || isAttaching}
-                    presentation={picker}
-                    onNavigate={(page) => setPicker((current) => current && { ...current, page })}
-                    onDrawerOpen={(page) => setPicker({ page, refocus: focused })}
-                    onDrawerAfterClose={() => {
-                      if (picker?.refocus) {
-                        fieldRef.current?.focus()
-                      }
-                      setPicker(null)
-                    }}
-                  />
-                ) : null}
-                <MobileNativeChatComposerPlanChip options={sessionOptions} inputRef={fieldRef} />
-                {goal.chip}
-              </MobileNativeChatDictationLeading>
-              {onMicPress ? (
-                <MobileNativeChatComposerMic
-                  {...{ onMicPress, micActive, micStarting, micProcessing, dictationMode }}
-                  {...{ onMicPressIn, onMicPressOut, cancelRef }}
-                  disabled={disabled || offline}
-                />
-              ) : null}
-              {editSession ? (
-                <MobileNativeChatEditActions
-                  canSave={canSend}
-                  onCancel={editSession.cancel}
-                  onSave={() => void handleSend()}
-                />
-              ) : (
-                <MobileNativeChatComposerSendSlot
-                  {...{
-                    fieldRef,
-                    value,
-                    draftScopeKey,
-                    attachmentCount,
-                    structured,
-                    agent,
-                    followUp,
-                    canSend,
-                    stop
-                  }}
-                  snapshot={sessionOptions?.controller.snapshot}
-                  steerHead={headChord}
-                  pickerOpen={menu.rows.length > 0}
-                  sendDisabled={sendDisabled}
-                  attaching={isAttaching || filesUploading || micActive}
-                  onSend={(intent, keepFocus) => void handleSend(intent, keepFocus)}
-                />
-              )}
-            </View>
-          </View>
-        </View>
-      </View>
+      {content}
     </MobileNativeChatComposerAllocation>
   )
-}
-
-export function MobileNativeChatDraftComposer({
-  draftKey,
-  ...props
-}: Omit<Props, 'value'> & { draftKey: string | null }): React.JSX.Element {
-  return <MobileNativeChatComposer {...props} value={useMobileNativeChatDraft(draftKey)} />
 }

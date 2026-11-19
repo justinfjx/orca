@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'vitest'
@@ -38,24 +38,49 @@ test('a linear stable update keeps the personal feature and adopts the new relea
   }
 })
 
-test('diverged release histories stop before reviving old-release-only content', () => {
+function siblingReleases(root, commit, conflict = false) {
+  personalGit(root, 'tag', 'fork-point')
+  commit('old-only.txt', 'retired official change\n')
+  personalGit(root, 'tag', 'v1.0.0')
+  personalGit(root, 'switch', '-qc', 'personal')
+  commit('feature.txt', 'required personal feature\n')
+  if (conflict) {
+    commit('base.txt', 'personal edit\n')
+  }
+  personalGit(root, 'switch', '-qc', 'next-official', 'fork-point')
+  commit('upstream.txt', 'replacement release\n')
+  if (conflict) {
+    commit('base.txt', 'incompatible official edit\n')
+  }
+  personalGit(root, 'tag', 'v1.0.1')
+  personalGit(root, 'switch', '-q', 'personal')
+}
+
+test('a sibling release keeps the personal patch and drops old-release-only content', () => {
   const { root, commit } = repository()
   try {
-    personalGit(root, 'tag', 'fork-point')
-    commit('old-only.txt', 'retired official change\n')
-    personalGit(root, 'tag', 'v1.0.0')
-    personalGit(root, 'switch', '-qc', 'personal')
-    commit('feature.txt', 'required personal feature\n')
+    siblingReleases(root, commit)
+    mergePersonalStableRelease(root, 'v1.0.0', 'v1.0.1')
+    personalGit(root, 'commit', '-qm', 'Adopt sibling release')
+    assert.equal(existsSync(join(root, 'old-only.txt')), false)
+    assert.equal(readFileSync(join(root, 'feature.txt'), 'utf8'), 'required personal feature\n')
+    assert.equal(readFileSync(join(root, 'upstream.txt'), 'utf8'), 'replacement release\n')
+    personalGit(root, 'merge-base', '--is-ancestor', 'v1.0.1', 'HEAD')
+    personalGit(root, 'merge-base', '--is-ancestor', 'v1.0.0', 'HEAD')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('an overlap on a sibling release reports the file and leaves personal unmodified', () => {
+  const { root, commit } = repository()
+  try {
+    siblingReleases(root, commit, true)
     const before = personalGit(root, 'rev-parse', 'HEAD')
-    personalGit(root, 'switch', '-qc', 'next-official', 'fork-point')
-    commit('upstream.txt', 'replacement release\n')
-    personalGit(root, 'tag', 'v1.0.1')
-    personalGit(root, 'switch', '-q', 'personal')
-    assert.throws(() => mergePersonalStableRelease(root, 'v1.0.0', 'v1.0.1'), {
-      code: 'PERSONAL_RELEASE_HISTORY_DIVERGED'
-    })
+    assert.throws(() => mergePersonalStableRelease(root, 'v1.0.0', 'v1.0.1'), /base\.txt/)
     assert.equal(personalGit(root, 'rev-parse', 'HEAD'), before)
     assert.equal(personalGit(root, 'status', '--porcelain'), '')
+    assert.equal(readFileSync(join(root, 'base.txt'), 'utf8'), 'personal edit\n')
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

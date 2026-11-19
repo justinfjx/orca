@@ -18,7 +18,7 @@ mkdirSync(supportDir, { recursive: true })
 const supportPath = join(supportDir, 'packaged-smoke-support.cjs')
 await build({
   stdin: {
-    contents: `export {createElectronHomeIsolation} from './tests/e2e/helpers/electron-home-isolation.ts'; export {getE2ECompletedOnboardingProfile} from './tests/e2e/helpers/e2e-completed-onboarding-profile.ts'; export {closeElectronAppForE2E,cleanupE2EDaemons} from './tests/e2e/helpers/electron-process-shutdown.ts'`,
+    contents: `export {createElectronHomeIsolation} from './tests/e2e/desktop/electron-fixtures/electron-home-isolation.ts'; export {getE2ECompletedOnboardingProfile} from './tests/e2e/desktop/electron-fixtures/e2e-completed-onboarding-profile.ts'; export {closeElectronAppForE2E,cleanupE2EDaemons} from './tests/e2e/desktop/electron-fixtures/electron-process-shutdown.ts'`,
     resolveDir: root,
     loader: 'ts'
   },
